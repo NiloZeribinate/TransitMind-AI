@@ -66,9 +66,9 @@ tests/
 - [x] Padronização dos nomes das colunas.
 - [x] Compatibilidade inicial com arquivos históricos sem `Cartão Hash`.
 - [x] Conversão inicial de datas.
-- [ ] Conversão e validação completa dos tipos.
-- [ ] Exportação para Parquet.
-- [ ] Consultas analíticas com DuckDB.
+- [x] Conversão e validação completa dos tipos.
+- [x] Exportação para Parquet.
+- [x] Consultas analíticas com DuckDB.
 - [ ] Integração com um agente de IA.
 - [ ] Interface de exploração.
 

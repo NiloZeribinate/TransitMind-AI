@@ -5,12 +5,7 @@ import pyarrow.parquet as pq
 
 from .schemas import ESQUEMAS
 from .types import TipoBase
-
-NOMES_BASES = {
-    "BU": "bilhete_unico",
-    "BE": "bilhetagem_eletronica",
-    "GRATUIDADE": "gratuidade",
-}
+from .config import NOMES_BASES
 
 TIPOS_ARROW = {
     # Textos e identificadores
