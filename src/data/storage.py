@@ -193,4 +193,105 @@ def salvar_particionado(df: pd.DataFrame, tipo: TipoBase, destino: str | Path, i
 
     return arquivos
 
+def lote_concluido(tipo: TipoBase, identificador_lote: str, destino: str | Path) -> bool:
+    """
+    Verifica se um lote foi processado e seus Parquets estão disponíveis.
 
+    Consulta o marcador .done e verifica a existência e a
+    legibilidade dos arquivos Parquet registrados nele.
+
+    Args:
+        tipo: Identificador da base.
+        identificador_lote: Identificador único do CSV de origem.
+        destino: Diretório principal dos dados processados.
+
+    Returns:
+        bool: True se o lote estiver concluído e seus arquivos
+        estiverem disponíveis; False caso contrário.
+    """
+    raiz = Path(destino).resolve()
+
+    marcador = (
+        raiz / "_completed" / tipo / f"{identificador_lote}.done"
+    )
+
+    if not marcador.is_file():
+        return False
+
+    caminhos = [
+        Path(linha)
+        for linha in marcador.read_text(encoding="utf-8").splitlines()
+        if linha.strip()
+    ]
+
+    if not caminhos:
+        return False
+
+    for caminho in caminhos:
+        if caminho.is_absolute() or ".." in caminho.parts:
+            return False
+
+        arquivo = raiz / caminho
+
+        if not arquivo.is_file():
+            return False
+
+        try:
+            pq.read_metadata(arquivo)
+        except (OSError, ValueError):
+            return False
+
+    return True
+
+def registrar_lote(tipo: TipoBase, identificador_lote: str, destino: str | Path, arquivos: list[Path]) -> Path:
+    """
+    Registra a conclusão de um lote em um arquivo .done.
+
+    Armazena os caminhos relativos dos Parquets produzidos.
+    O marcador é escrito temporariamente e renomeado após
+    a conclusão da escrita.
+
+    Deve ser chamada somente após a validação do lote.
+
+    Args:
+        tipo: Identificador da base.
+        identificador_lote: Identificador único do CSV de origem.
+        destino: Diretório principal dos dados processados.
+        arquivos: Caminhos dos Parquets gerados e validados.
+
+    Returns:
+        Path: Caminho do marcador de conclusão.
+
+    Raises:
+        ValueError: Se a lista de arquivos estiver vazia ou
+            contiver caminhos fora do diretório processado.
+        OSError: Se houver falha ao gravar o marcador.
+    """
+    if not arquivos:
+        raise ValueError("Nenhum Parquet foi produzido.")
+
+    raiz = Path(destino).resolve()
+
+    marcador = (
+        raiz / "_completed" / tipo / f"{identificador_lote}.done"
+    )
+
+    marcador.parent.mkdir(parents=True, exist_ok=True)
+
+    caminhos = [
+        arquivo.resolve().relative_to(raiz).as_posix()
+        for arquivo in arquivos
+    ]
+
+    temporario = marcador.with_suffix(".done.part")
+
+    try:
+        temporario.write_text(
+            "\n".join(caminhos) + "\n",
+            encoding="utf-8",
+        )
+        temporario.replace(marcador)
+    finally:
+        temporario.unlink(missing_ok=True)
+
+    return marcador

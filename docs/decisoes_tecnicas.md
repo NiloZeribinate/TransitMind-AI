@@ -116,6 +116,31 @@ Segundo a interpretação operacional adotada no projeto, o campo representa a s
 
 **Validação:** Conferir se os valores observados são inteiros não negativos e registrar eventuais inconsistências durante o processamento.
 
+## DT-008 — Controle simplificado de lotes processados
+
+**Status:** Adotada para o protótipo; implementação pendente
+
+**Contexto:** Um arquivo CSV publicado pela SETRAN pode conter transações de diferentes meses, gerando múltiplos arquivos Parquet. O processamento pode ser interrompido antes da conclusão de todas as gravações.
+
+Segundo as informações obtidas em reuniões com a SETRAN, os arquivos publicados não são alterados posteriormente. Mudanças estruturais serão disponibilizadas em novas versões das bases.
+
+**Decisão:** Utilizar um marcador de conclusão (`.done`) por lote de origem, criado somente após a gravação e validação de todos os arquivos Parquet correspondentes.
+
+**Motivação:**
+- Evitar reprocessamentos desnecessários.
+- Identificar lotes concluídos sem depender dos CSVs originais.
+- Permitir a exclusão controlada dos arquivos brutos.
+- Reduzir a complexidade de implementação do MVP.
+
+**Limitações:**
+- A presença do marcador não substitui uma verificação integral da integridade dos dados.
+- Não haverá detecção automática de alterações nos arquivos de origem.
+- O reprocessamento de lotes incompletos poderá sobrescrever arquivos já produzidos.
+- A publicação de múltiplos Parquets não será atomicamente transacional.
+- Mudanças futuras no esquema poderão exigir reprocessamento e versionamento dos dados.
+
+**Evolução para produto:** Implementar controle transacional de lotes, versionamento dos esquemas, rastreabilidade completa das fontes, tratamento de concorrência e mecanismos de recuperação de falhas.
+
 ---
 
 ## Decisões em aberto
