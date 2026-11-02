@@ -1,0 +1,15 @@
+# Dados reais
+data/raw/*
+data/processed/*
+
+# Ambientes e configurações locais
+.venv/
+venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Jupyter
+.ipynb_checkpoints/
