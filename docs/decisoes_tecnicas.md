@@ -73,6 +73,49 @@ As decisões podem ser revisadas conforme o projeto evoluir.
 - Será necessário controlar quais arquivos de origem já foram incorporados.
 - Os dados brutos só poderão ser descartados após validação e confirmação de que podem ser recuperados.
 
+## DT-006 — Normalização do sentido por modal
+
+**Status:** Em implementação
+
+**Contexto:** O dicionário oficial define `Sentido` como 0 (não informado), 1 (ida) e 2 (volta). Entretanto, a exploração das bases BU e BE identificou valores potencialmente artificiais ou ausentes em registros de metrô, trem, BRT, barcas e vans.
+
+**Decisão:** Normalizar o sentido desses modais para 0, conforme a interpretação operacional adotada para o protótipo, preservando o valor original para rastreabilidade.
+
+**Motivação:** Evitar que o agente de IA apresente distribuições incorretas de ida e volta a partir de códigos não confiáveis.
+
+**Limitações:**
+- A classificação dos modais precisa ser validada.
+- A regra se baseia em observações empíricas e pode precisar de revisão.
+- O código 0 no conjunto processado representará também uma normalização realizada por falta de confiabilidade semântica.
+
+**Validação:** Registrar o número de valores modificados por base e por modal, distinguindo valores originalmente ausentes de valores originalmente iguais a 2.
+
+## DT-007 — Interpretação do índice de integração
+
+**Status:** Adotada
+
+**Contexto:** A base de Bilhete Único possui a coluna `Qtde Integrações`, descrita no dicionário oficial como a quantidade de integrações realizadas na mesma viagem.
+
+Segundo a interpretação operacional adotada no projeto, o campo representa a sequência de validações, começando em zero na primeira validação e aumentando nas integrações seguintes.
+
+**Decisão:** Renomear a coluna para `indice_integracao`, preservando seus valores originais, sem adicionar 1 ou criar colunas derivadas.
+
+**Motivação:**
+- Tornar o nome mais coerente com o significado operacional identificado.
+- Evitar confundir o índice com a quantidade total de validações ou viagens.
+- Preservar a informação original sem transformações desnecessárias.
+- Manter a padronização centralizada no `schemas.py`.
+
+**Consequências:**
+- A primeira validação possui índice 0.
+- A segunda validação possui índice 1, e assim sucessivamente.
+- O campo será armazenado como inteiro anulável (`Int64`) no Pandas.
+- Não será necessária uma etapa específica de transformação para esse campo.
+
+**Limitações:** A interpretação se baseia na experiência prática com os dados e é mais específica do que a descrição apresentada no dicionário oficial. O índice, isoladamente, não permite reconstruir integralmente uma viagem nem determinar seu destino.
+
+**Validação:** Conferir se os valores observados são inteiros não negativos e registrar eventuais inconsistências durante o processamento.
+
 ---
 
 ## Decisões em aberto

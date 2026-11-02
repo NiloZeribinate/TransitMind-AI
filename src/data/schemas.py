@@ -21,7 +21,7 @@ COLUNAS_SENTIDO = {
 }
 
 COLUNAS_BU = {
-    "Qtde Integrações": "quantidade_integracoes",
+    "Qtde Integrações": "indice_integracao",
     "Data da Ordem": "data_ordem",
     "Nº Ordem": "numero_ordem",
 }
@@ -30,6 +30,7 @@ COLUNAS_GRATUIDADE = {
     "Escola": "escola",
     "Nº Censo Escola": "numero_censo_escola",
 }
+
 
 ESQUEMAS = {
     "BU": {
@@ -65,6 +66,7 @@ ESQUEMAS = {
         "colunas_opcionais": {"Cartão Hash"},
     },
 }
+
 
 TIPOS_COMUNS = {
     "cartao_hash": "string",
@@ -109,4 +111,16 @@ REGRAS = {
             "data_processamento": "%Y-%m-%d %H:%M:%S",
         },
     },
+}
+
+
+SINDICATOS_SEM_SENTIDO = {
+    "BARCAS",
+    "METRÔ RIO",
+    "VANS INTERMUNICIPAIS",
+    "SUPERVIA",
+}
+
+OPERADORAS_SEM_SENTIDO = {
+    "BRT RIO S.A.",
 }
