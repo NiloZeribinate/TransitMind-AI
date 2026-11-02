@@ -8,6 +8,8 @@ import zipfile
 
 import requests
 
+from .types import TipoBase
+
 
 # Identificadores dos conjuntos de dados no portal CKAN
 DATASETS = {
@@ -20,7 +22,22 @@ API_URL = "https://dadosabertos.rj.gov.br/api/3/action/package_show"
 
 
 def converter_data(valor: str | date) -> date:
-    """Converte uma string YYYY-MM-DD ou date em date."""
+    """
+    Converte uma data para o tipo datetime.date.
+
+    Aceita uma string no formato YYYY-MM-DD ou um objeto date,
+    permitindo padronizar as datas recebidas pelo pipeline.
+
+    Args:
+        valor: Data a ser convertida.
+
+    Returns:
+        date: Data convertida.
+
+    Raises:
+        ValueError: Se a string não representar uma data válida.
+        TypeError: Se o valor não for compatível com a conversão.
+    """
     if isinstance(valor, date):
         return valor
 
@@ -29,11 +46,36 @@ def converter_data(valor: str | date) -> date:
 
 def obter_recursos(
     session: requests.Session,
-    tipo: str,
+    tipo: TipoBase,
     data_inicio: date,
     data_fim: date,
 ) -> list[dict]:
-    """Consulta o CKAN e retorna os arquivos do período informado."""
+    """
+    Consulta a API CKAN e identifica os recursos de uma base
+    publicados no intervalo solicitado.
+
+    Obtém a lista de recursos do conjunto de dados correspondente
+    e filtra aqueles cujos nomes contêm uma data dentro do período,
+    incluindo as datas inicial e final.
+
+    O intervalo considera a data indicada no nome do recurso,
+    não necessariamente a data das transações contidas nele.
+
+    Args:
+        session: Sessão HTTP utilizada para consultar a API.
+        tipo: Identificador da base (BU, BE ou GRATUIDADE).
+        data_inicio: Data inicial do período de publicação.
+        data_fim: Data final do período de publicação.
+
+    Returns:
+        list[dict]: Recursos encontrados, contendo seus metadados,
+        incluindo nomes e URLs de download.
+
+    Raises:
+        ValueError: Se a base informada for desconhecida.
+        requests.RequestException: Se ocorrer uma falha HTTP.
+        RuntimeError: Se a API indicar falha na consulta.
+    """
 
     if tipo not in DATASETS:
         raise ValueError(f"Tipo de dado desconhecido: {tipo}")
@@ -82,7 +124,22 @@ def obter_recursos(
 
 
 def nome_arquivo(recurso: dict) -> str:
-    """Obtém um nome de arquivo a partir da URL do recurso."""
+    """
+    Extrai o nome do arquivo a partir da URL de um recurso.
+
+    Remove os componentes da URL que não pertencem ao caminho
+    e decodifica caracteres especiais antes de obter o nome.
+
+    Args:
+        recurso: Dicionário de metadados contendo a URL do arquivo.
+
+    Returns:
+        str: Nome do arquivo com sua extensão.
+
+    Raises:
+        KeyError: Se o recurso não contiver a chave 'url'.
+        ValueError: Se não for possível identificar um nome.
+    """
 
     url = recurso["url"]
     nome = Path(unquote(urlparse(url).path)).name
@@ -98,7 +155,35 @@ def baixar_arquivo(
     recurso: dict,
     destino: Path,
 ) -> Path:
-    """Baixa um arquivo sem deixar um download incompleto como definitivo."""
+    """
+    Baixa um recurso para o diretório de destino.
+
+    Realiza o download em blocos para evitar carregar o arquivo
+    inteiro na memória RAM.
+
+    O conteúdo é gravado inicialmente em um arquivo temporário
+    com extensão .part, renomeado após a conclusão do download.
+
+    Se o arquivo definitivo já existir e não estiver vazio,
+    o download será ignorado.
+
+    Quando o servidor fornece Content-Length, o tamanho recebido
+    é comparado ao esperado. Essa verificação não garante,
+    isoladamente, a integridade do conteúdo.
+
+    Args:
+        session: Sessão HTTP utilizada no download.
+        recurso: Metadados do recurso, incluindo a URL.
+        destino: Diretório onde o arquivo será armazenado.
+
+    Returns:
+        Path: Caminho do arquivo baixado ou reutilizado.
+
+    Raises:
+        requests.RequestException: Se ocorrer uma falha HTTP.
+        OSError: Se houver erro de escrita ou espaço insuficiente.
+        IOError: Se o tamanho recebido divergir do esperado.
+    """
 
     destino.mkdir(parents=True, exist_ok=True)
 
@@ -163,7 +248,29 @@ def baixar_arquivo(
 
 
 def extrair_zip(arquivo: Path, destino: Path) -> Path | None:
-    """Extrai um ZIP para uma pasta própria, verificando os caminhos."""
+    """
+    Extrai o conteúdo de um arquivo ZIP para uma pasta própria.
+
+    Organiza os arquivos extraídos em um diretório associado
+    ao nome do ZIP e verifica o espaço disponível antes de
+    iniciar a extração.
+
+    Também verifica os caminhos internos do arquivo para
+    evitar que arquivos sejam escritos fora do destino previsto.
+
+    Args:
+        arquivo: Caminho do arquivo ZIP.
+        destino: Diretório que receberá os arquivos extraídos.
+
+    Returns:
+        Path | None: Caminho da pasta extraída ou None caso
+        o arquivo não seja reconhecido como ZIP.
+
+    Raises:
+        OSError: Se houver espaço insuficiente ou erro de escrita.
+        ValueError: Se o ZIP contiver caminhos inseguros.
+        zipfile.BadZipFile: Se o arquivo ZIP estiver corrompido.
+    """
 
     if not zipfile.is_zipfile(arquivo):
         return None
@@ -209,23 +316,42 @@ def baixar_periodo(
     data_inicio: str | date,
     data_fim: str | date,
     destino: str | Path,
-    tipos: tuple[str, ...] = ("BE", "BU", "GRATUIDADE"),
+    tipos: tuple[TipoBase, ...] = ("BE", "BU", "GRATUIDADE"),
     extrair: bool = True,
     manter_zip: bool = False
 ) -> dict:
     """
-    Baixa os arquivos publicados em um período.
+    Baixa os recursos de uma ou mais bases publicados em um período.
+
+    Coordena a consulta à API CKAN, a seleção dos recursos,
+    o download dos arquivos e sua extração opcional.
+
+    Organiza os arquivos em subdiretórios por base e retorna
+    um relatório com os downloads realizados, os recursos
+    ignorados e as datas sem publicações encontradas.
+
+    As datas inicial e final são inclusivas. O período se refere
+    à publicação dos arquivos, não às datas das transações.
 
     Args:
-        data_inicio: Primeiro dia do período (inclusive).
-        data_fim: Último dia do período (inclusive).
-        destino: Diretório onde os arquivos serão armazenados.
-        tipos: Conjuntos de dados que serão baixados.
-        extrair: Se True, extrai os ZIPs.
-        manter_zip: Se False, deleta os ZIPs originais.
+        data_inicio: Data inicial no formato YYYY-MM-DD ou date.
+        data_fim: Data final no formato YYYY-MM-DD ou date.
+        destino: Diretório principal para armazenamento.
+        tipos: Bases que serão baixadas.
+        extrair: Define se os arquivos ZIP serão extraídos.
+        manter_zip: Define se os ZIPs serão preservados após
+            uma extração bem-sucedida.
 
     Returns:
-        Dicionário com arquivos baixados, ignorados e datas sem publicação.
+        dict: Relatório por base, contendo:
+            - baixados: Caminhos dos arquivos baixados.
+            - ignorados: Recursos que não exigiram novo download.
+            - sem_publicacao: Datas sem recursos correspondentes.
+
+    Raises:
+        ValueError: Se o intervalo ou uma base forem inválidos.
+        requests.RequestException: Se ocorrer uma falha HTTP.
+        OSError: Se houver problemas no armazenamento.
     """
 
     inicio = converter_data(data_inicio)
