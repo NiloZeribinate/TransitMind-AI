@@ -1,6 +1,7 @@
 import pandas as pd
 import pyarrow.parquet as pq
 from typing import get_args
+from pathlib import Path
 
 from src.data.storage import (
     salvar_particionado,
@@ -9,6 +10,7 @@ from src.data.storage import (
 )
 from src.data.types import TipoBase
 from src.data.preprocessing import preprocessar
+from src.data.catalog import gerar_catalogo, normalizar_busca
 
 destino = "data/processed"
 
@@ -24,11 +26,13 @@ identificador = {
     "GRATUIDADE": "TRANSACAO_GRATUIDADE_PUBLICO_2026_03_01"
 }
 
+novos_lotes = 0
 for tipo in get_args(TipoBase):
     lote = identificador[tipo]
 
     if lote_concluido(tipo, lote, destino):
         print(f"{lote} já foi processado. Ignorando...")
+        novos_lotes += 1
         continue
 
     df = pd.read_csv(
@@ -64,3 +68,32 @@ for tipo in get_args(TipoBase):
     )
 
     print(f"{lote} concluído com sucesso!")
+
+caminho_catalogo = (
+    Path(destino) / "_catalogo" / "entidades.parquet"
+)
+
+if novos_lotes > 0 or not caminho_catalogo.is_file():
+    caminho = gerar_catalogo(destino)
+    print(f"Catálogo atualizado: {caminho}")
+else:
+    print("Catálogo já atualizado.")
+
+caminho = gerar_catalogo("data/processed")
+catalogo = pd.read_parquet(caminho)
+
+print(catalogo.groupby("campo").size())
+print(catalogo.head(10))
+
+assert set(catalogo["campo"]) == {
+    "linha", "operadora", "sindicato"
+}
+
+assert not catalogo.duplicated(
+    subset=["campo", "valor_original"]
+).any()
+
+assert all(
+    catalogo["chave_busca"]
+    == catalogo["valor_original"].map(normalizar_busca)
+)
