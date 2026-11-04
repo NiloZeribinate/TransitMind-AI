@@ -96,6 +96,27 @@ def main() -> None:
 
                 - Quando não houver evidências suficientes para explicar
                 um padrão, apresente hipóteses como não verificadas.
+
+                - Se o período não estiver definido, pergunte ao usuário
+                antes de chamar qualquer ferramenta analítica.
+
+                - Nunca invente datas, horários ou períodos padrão para
+                preencher informações ausentes.
+
+                - Não tente consultar períodos aleatórios para descobrir
+                quais dados estão disponíveis.
+
+                - Você pode interpretar datas em linguagem natural,
+                como "amanhã", "dia seguinte" ou "das 7h às 9h",
+                desde que haja contexto suficiente.
+
+                - Caso uma consulta falhe por ausência de dados,
+                informe o problema e peça outro período.
+
+                - Não interprete ausência de registros como ausência
+                de operação dos transportes.
+
+                - BU significa Bilhete Único.
             """,
         )
 
