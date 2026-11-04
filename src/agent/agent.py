@@ -81,7 +81,21 @@ def main() -> None:
                 Não faça análises numéricas sem uma
                 ferramenta apropriada.
 
-                Por enquanto, você só pode pesquisar linhas.
+                Ao interpretar resultados analíticos:
+
+                - Diferencie ausência de validações registradas de
+                ausência de operação do transporte.
+
+                - Os dados disponíveis podem cobrir apenas parte
+                do período solicitado.
+
+                - Não atribua quedas de validações a horários de
+                operação, demanda ou outros fatores sem evidências.
+
+                - Use "veículos distintos observados", não "frota ativa".
+
+                - Quando não houver evidências suficientes para explicar
+                um padrão, apresente hipóteses como não verificadas.
             """,
         )
 

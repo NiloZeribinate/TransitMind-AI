@@ -25,6 +25,12 @@ def analisar_validacoes_por_veiculo(
     Returns:
         dict: Resultado horário da análise ou erro estruturado.
     """
+    print(
+        f"[TOOL] analisar_validacoes_por_veiculo("
+        f"linha={linha!r}, inicio={inicio!r}, "
+        f"fim={fim!r}, sentido={sentido!r})"
+    )
+
     try:
         inicio_dt = datetime.fromisoformat(inicio)
         fim_dt = datetime.fromisoformat(fim)
@@ -40,7 +46,9 @@ def analisar_validacoes_por_veiculo(
         sentido_convertido = opcoes[sentido]
 
         resultado = validacoes_por_veiculo_hora(inicio_dt, fim_dt, linha, sentido_convertido, "BU")
-        
+
+        print(f"[TOOL RESULT] {len(resultado)} horários retornados")
+
         resultado["horario"] = (
             resultado["horario"]
             .dt.strftime("%Y-%m-%dT%H:%M:%S")
