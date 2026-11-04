@@ -69,7 +69,7 @@ tests/
 - [x] Conversão e validação completa dos tipos.
 - [x] Exportação para Parquet.
 - [x] Consultas analíticas com DuckDB.
-- [ ] Integração com um agente de IA.
+- [X] Integração com um agente de IA.
 - [ ] Interface de exploração.
 
 ## Limitações

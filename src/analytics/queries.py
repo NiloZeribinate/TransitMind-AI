@@ -2,9 +2,9 @@ import duckdb
 import pandas as pd
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, get_args
+from typing import get_args
 
-from src.data.types import TipoBase
+from src.data.types import TipoBase, FiltroSentido
 from src.data.config import (
     NOMES_BASES,
     SINDICATOS_SEM_SENTIDO,
@@ -12,10 +12,7 @@ from src.data.config import (
     SINDICATOS_EXCLUIDOS_VEICULOS,
     OPERADORAS_EXCLUIDAS_VEICULOS,
 )
-from src.data.catalog import normalizar_busca
 from src.analytics.linhas import validar_linha_exata
-
-FiltroSentido = Literal["todos", 0, 1, 2]
 
 
 def arquivos_do_periodo(
