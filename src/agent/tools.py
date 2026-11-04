@@ -1,8 +1,45 @@
 from datetime import datetime
 from typing import get_args
+from time import perf_counter
 
-from src.analytics.queries import validacoes_por_veiculo_hora
 from src.data.types import FiltroSentido
+from src.analytics.queries import validacoes_por_veiculo_hora
+from src.analytics.linhas import (
+    buscar_linhas,
+    LinhaNaoEncontradaError,
+)
+
+
+def pesquisar_linhas(termo: str) -> dict:
+    """
+    Pesquisa linhas de transporte disponíveis no TransitMind AI.
+
+    A pesquisa aceita nomes parciais, sem diferenciar letras
+    maiúsculas, minúsculas ou acentos.
+
+    Args:
+        termo: Nome ou trecho do nome da linha desejada.
+
+    Returns:
+        dict: Status da pesquisa e lista de nomes oficiais
+            encontrados no catálogo.
+    """
+    print(f"[TOOL] pesquisar_linhas(termo={termo!r})")
+
+    try:
+        linhas = buscar_linhas(termo=termo)
+
+        return {
+            "status": "encontradas",
+            "linhas": linhas,
+        }
+
+    except LinhaNaoEncontradaError:
+        return {
+            "status": "nao_encontrada",
+            "linhas": [],
+        }
+
 
 def analisar_validacoes_por_veiculo(
     linha: str,
@@ -45,8 +82,16 @@ def analisar_validacoes_por_veiculo(
 
         sentido_convertido = opcoes[sentido]
 
-        resultado = validacoes_por_veiculo_hora(inicio_dt, fim_dt, linha, sentido_convertido, "BU")
+        inicio = perf_counter()
 
+        resultado = validacoes_por_veiculo_hora(
+            inicio_dt, fim_dt, linha, sentido_convertido, "BU"
+        )
+
+        print(
+            f"[PERF] DuckDB + análise: "
+            f"{perf_counter() - inicio:.2f}s"
+        )
         print(f"[TOOL RESULT] {len(resultado)} horários retornados")
 
         resultado["horario"] = (

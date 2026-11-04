@@ -1,0 +1,94 @@
+.tm-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.tm-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 11px;
+    padding: 13px;
+    border-radius: 12px;
+    border: 1px solid rgba(150, 160, 180, .18);
+    background: rgba(125, 135, 160, .06);
+    min-width: 0;
+}
+
+.tm-card.executando { --status: #85aaff; }
+.tm-card.concluida { --status: #50c99a; }
+.tm-card.erro { --status: #fb7185; }
+
+.tm-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    flex-shrink: 0;
+    border-radius: 9px;
+    border: 1px solid var(--status);
+    color: var(--status);
+    font-size: 15px;
+    font-weight: bold;
+}
+
+.tm-content {
+    min-width: 0;
+    flex: 1;
+}
+
+.tm-title {
+    font-weight: 600;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.tm-details {
+    font-size: 12px;
+    opacity: .65;
+    margin-top: 3px;
+    overflow-wrap: anywhere;
+}
+
+.tm-state {
+    color: var(--status);
+    font-size: 11px;
+    font-weight: 600;
+    margin-top: 7px;
+}
+
+.tm-spinner {
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    border: 2px solid var(--status);
+    border-top-color: transparent;
+    animation: tm-spin .7s linear infinite;
+}
+
+.tm-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 7px;
+}
+
+.tm-meta .tm-state {
+    margin-top: 0;
+}
+
+.tm-time {
+    font-size: 11px;
+    color: #aab2c5;
+    background: rgba(150, 160, 180, .08);
+    border: 1px solid rgba(150, 160, 180, .18);
+    padding: 3px 7px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+@keyframes tm-spin {
+    to { transform: rotate(360deg); }
+}
