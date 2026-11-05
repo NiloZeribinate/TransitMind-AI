@@ -2,16 +2,25 @@ import os
 
 from google import genai
 from google.genai import types
+from time import perf_counter, time
+from collections.abc import Callable
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 
 from src.agent.tools import (
     pesquisar_linhas as _pesquisar_linhas,
     analisar_validacoes_por_veiculo as _analisar_validacoes,
+    ranking_linhas_por_validacoes as _ranking_linhas,
 )
-
-from time import perf_counter, time
 
 from src.agent.eventos import Notificador, notificar
 
+ResultadoCallback = Callable[[dict], None]
+
+hoje = datetime.now(
+    ZoneInfo("America/Sao_Paulo")
+).strftime("%d/%m/%Y")
 
 INSTRUCOES = """
     Você é o TransitMind AI, um assistente
@@ -72,10 +81,37 @@ INSTRUCOES = """
     de operação dos transportes.
 
     - BU significa Bilhete Único.
+
+    APRESENTAÇÃO DE ANÁLISES:
+
+    Quando a ferramenta de validações por veículo retornar sucesso,
+    a interface web poderá apresentar automaticamente três gráficos:
+    - Total de validações por hora;
+    - Veículos distintos observados por hora;
+    - Validações por veículo observado.
+
+    Seu papel é interpretar os resultados, não reproduzir
+    uma longa lista de valores horários.
+
+    Destaque os principais padrões, horários de pico e
+    variações relevantes, sempre com base nos dados retornados.
+
+    Evite repetir todos os registros. Cite números específicos
+    apenas quando ajudarem a explicar uma conclusão.
+
+    Não afirme que você gerou os gráficos: a visualização
+    é responsabilidade da interface.
+
+    Use "validações registradas", não "passageiros únicos".
+    Veículos observados não representam necessariamente
+    a frota total em operação.
+
+    Horas sem registros não comprovam ausência de serviço.
+    Reconheça possíveis limitações de cobertura dos dados.
 """
 
 
-def criar_chat(cliente: genai.Client, callback: Notificador | None = None):
+def criar_chat(cliente: genai.Client, callback: Notificador | None = None, registrar_resultado: ResultadoCallback | None = None):
     def pesquisar_linhas(termo: str) -> dict:
         """Pesquisa linhas de transporte pelo nome ou trecho informado."""
         iniciado_em = time()
@@ -131,9 +167,16 @@ def criar_chat(cliente: genai.Client, callback: Notificador | None = None):
         inicio_medicao = perf_counter()
 
         try:
-            resultado = _analisar_validacoes(
-                linha, inicio, fim, sentido
-            )
+            resultado = _analisar_validacoes(linha, inicio, fim, sentido)
+
+            if (resultado.get("status") == "sucesso" and registrar_resultado is not None):
+
+                registrar_resultado({
+                    "tipo": "validacoes_por_veiculo",
+                    "linha": linha,
+                    "base": resultado.get("base", "BU"),
+                    "registros": resultado["registros"],
+                })
 
             houve_erro = resultado.get("status") == "erro"
 
@@ -161,13 +204,71 @@ def criar_chat(cliente: genai.Client, callback: Notificador | None = None):
                 tempo=perf_counter() - inicio_medicao,
             )
             raise
+
+    def ranking_linhas_por_validacoes(inicio: str, fim: str, limite: int = 10, tipo: str = "BU") -> dict:
+        """
+        Consulta as linhas com mais validações registradas.
+
+        Args:
+            inicio: Início do período em ISO 8601.
+            fim: Final do período em ISO 8601.
+            limite: Quantidade de linhas, de 1 a 20.
+            tipo: Base BU, BE ou GRATUIDADE.
+
+        Returns:
+            dict: Ranking calculado ou erro estruturado.
+        """
+        iniciado_em = time()
+
+        notificar(
+            callback,
+            "pesquisar_linhas",
+            "executando",
+            f"{limite} linhas mais usadas",
+            iniciado_em=iniciado_em,
+        )
+
+        inicio_medicao = perf_counter()
+        
+        resultado = _ranking_linhas(inicio, fim, limite, tipo)
+
+        if (
+            resultado.get("status") == "sucesso"
+            and registrar_resultado is not None
+        ):
+            registrar_resultado({
+                "tipo": "ranking_linhas",
+                "base": resultado["base"],
+                "ranking": resultado["ranking"],
+                "inicio": resultado["inicio"],
+                "fim_exclusivo": resultado["fim_exclusivo"],
+            })
+
+        notificar(
+            callback,
+            "pesquisar_linhas",
+            "concluida",
+            f"{limite} linhas mais usadas",
+            iniciado_em=iniciado_em,
+            tempo=perf_counter() - inicio_medicao
+        )
+
+        return resultado
     
     configuracao = types.GenerateContentConfig(
         tools=[
             pesquisar_linhas,
             analisar_validacoes_por_veiculo,
+            ranking_linhas_por_validacoes,
         ],
-        system_instruction=INSTRUCOES,
+        system_instruction=(
+            f"A data atual é {hoje}, no fuso horário de Brasília.\n"
+            "Use essa data como referência temporal. "
+            "Não presuma que os dados disponíveis cobrem a data atual. "
+            "Quando o usuário não informar o período de uma análise, "
+            "solicite essa informação, sem inventar datas.\n\n"
+            + INSTRUCOES
+        ),
     )
 
     chat = cliente.chats.create(

@@ -1,9 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import get_args
 from time import perf_counter
 
 from src.data.types import FiltroSentido
-from src.analytics.queries import validacoes_por_veiculo_hora
+from src.analytics.queries import validacoes_por_veiculo_hora, linhas_mais_utilizadas
 from src.analytics.linhas import (
     buscar_linhas,
     LinhaNaoEncontradaError,
@@ -38,6 +38,70 @@ def pesquisar_linhas(termo: str) -> dict:
         return {
             "status": "nao_encontrada",
             "linhas": [],
+        }
+
+
+
+def ranking_linhas_por_validacoes(
+    inicio: str,
+    fim: str,
+    limite: int = 10,
+    tipo: str = "BU",
+) -> dict:
+    """
+    Retorna as linhas com mais validações registradas.
+
+    Args:
+        inicio: Início do período em formato ISO 8601.
+        fim: Fim do período em formato ISO 8601.
+            Uma data sem horário inclui o dia inteiro.
+        limite: Quantidade máxima de linhas, de 1 a 20.
+        tipo: Base de dados: BU, BE ou GRATUIDADE.
+
+    Returns:
+        dict: Ranking ordenado ou mensagem de erro.
+    """
+    try:
+        if tipo not in {"BU", "BE", "GRATUIDADE"}:
+            raise ValueError("Base de dados inválida.")
+
+        if not 1 <= limite <= 20:
+            raise ValueError("O limite deve estar entre 1 e 20.")
+
+        data_inicio = datetime.fromisoformat(inicio)
+        data_fim = datetime.fromisoformat(fim)
+
+        # Data sem horário significa o dia inteiro.
+        if len(fim) == 10:
+            data_fim += timedelta(days=1)
+
+        if data_inicio >= data_fim:
+            raise ValueError(
+                "A data inicial deve ser anterior à final."
+            )
+
+        linhas = linhas_mais_utilizadas(
+            tipo, data_inicio, data_fim, limite
+        )
+
+        return {
+            "status": "sucesso",
+            "base": tipo,
+            "inicio": data_inicio.isoformat(),
+            "fim_exclusivo": data_fim.isoformat(),
+            "ranking": [
+                {
+                    "linha": linha,
+                    "total_validacoes": int(quantidade),
+                }
+                for linha, quantidade in linhas
+            ],
+        }
+
+    except (ValueError, FileNotFoundError) as erro:
+        return {
+            "status": "erro",
+            "mensagem": str(erro),
         }
 
 

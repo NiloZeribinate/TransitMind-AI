@@ -6,6 +6,7 @@ from html import escape
 from pathlib import Path
 
 from src.agent.agent import criar_chat
+from src.ui.graficos import renderizar_resultado
 
 
 ASSETS = Path(__file__).parent / "assets"
@@ -34,6 +35,12 @@ def encaminhar_evento(evento):
         observador(evento)
 
 # Inicializamos os dados somente uma vez por sessão.
+if "resultados_pendentes" not in st.session_state:
+    st.session_state.resultados_pendentes = []
+
+def encaminhar_resultado(resultado: dict):
+    st.session_state.resultados_pendentes.append(resultado)
+
 if "cliente" not in st.session_state:
     st.session_state.cliente = genai.Client()
 
@@ -41,6 +48,7 @@ if "chat" not in st.session_state:
     st.session_state.chat = criar_chat(
         st.session_state.cliente,
         callback=encaminhar_evento,
+        registrar_resultado=encaminhar_resultado,
     )
 
 if "mensagens" not in st.session_state:
@@ -72,6 +80,7 @@ def confirmar_reinicio():
             st.session_state.chat = criar_chat(
                 st.session_state.cliente,
                 callback=encaminhar_evento,
+                registrar_resultado=encaminhar_resultado,
             )
             st.session_state.mensagens = []
             st.session_state.eventos = []
@@ -206,9 +215,19 @@ st.caption(
     "Explore dados públicos de transporte do Rio de Janeiro."
 )
 
-for mensagem in st.session_state.mensagens:
-    with st.chat_message(mensagem["papel"]):
-        st.markdown(mensagem["conteudo"])
+area_chat = st.container(
+    height=480,
+    border=False,
+    autoscroll=True,
+)
+
+with area_chat:
+    for mensagem in st.session_state.mensagens:
+        with st.chat_message(mensagem["papel"]):
+            st.markdown(mensagem["conteudo"])
+
+            for resultado in mensagem.get("resultados", []):
+                renderizar_resultado(resultado)
 
 
 # Rodapé fixo
@@ -234,37 +253,38 @@ with st.bottom:
 
 # Processamento da mensagem
 if pergunta:
+    st.session_state.resultados_pendentes = []
+
     st.session_state.mensagens.append({
         "papel": "user",
         "conteudo": pergunta,
     })
 
-    with st.chat_message("user"):
-        st.markdown(pergunta)
+    with area_chat:
+        with st.chat_message("user"):
+            st.markdown(pergunta)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Consultando..."):
-            try:
-                inicio = perf_counter()
+        with st.chat_message("assistant"):
+            with st.spinner("Consultando..."):
+                try:
+                    resposta = st.session_state.chat.send_message(pergunta)
+                    texto = resposta.text or "Sem resposta textual."
+                except Exception as erro:
+                    print(f"[APP ERROR] {erro!r}")
+                    st.error("Não foi possível obter a resposta.")
+                    st.stop()
 
-                resposta = st.session_state.chat.send_message(pergunta)
+            st.markdown(texto)
 
-                print(
-                    f"[PERF] Gemini + ferramentas: "
-                    f"{perf_counter() - inicio:.2f}s"
-                )
-                texto = resposta.text or "Sem resposta textual."
-            except Exception as erro:
-                print(f"[APP ERROR] {erro!r}")
-                st.error(
-                    "Não foi possível obter a resposta. "
-                    "Verifique o terminal."
-                )
-                st.stop()
+            resultados = list(
+                st.session_state.resultados_pendentes
+            )
 
-        st.markdown(texto)
+            for resultado in resultados:
+                renderizar_resultado(resultado)
 
     st.session_state.mensagens.append({
         "papel": "assistant",
         "conteudo": texto,
+        "resultados": resultados,
     })
