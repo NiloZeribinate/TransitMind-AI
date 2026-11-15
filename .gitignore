@@ -6,10 +6,14 @@ data/processed/*
 .venv/
 venv/
 .env
+.env.*
+!.env.example
+.streamlit/secrets.toml
 
 # Python
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
 # Jupyter
 .ipynb_checkpoints/
