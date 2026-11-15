@@ -1,152 +1,241 @@
-# Decisões técnicas
+# Decisões técnicas — TransitMind AI
 
-Este documento registra as principais decisões de engenharia tomadas durante o desenvolvimento do projeto, incluindo suas justificativas, alternativas consideradas e limitações.
+Este documento registra decisões de engenharia adotadas no desenvolvimento do **TransitMind AI**, com seus contextos, justificativas, consequências e limitações. Seu objetivo é explicar não apenas *o que* foi implementado, mas *por que* determinadas abordagens foram escolhidas.
 
-As decisões podem ser revisadas conforme o projeto evoluir.
+**Escopo:** protótipo de exploração de dados públicos de transporte do Estado do Rio de Janeiro. As decisões refletem o código disponível para revisão e as atualizações realizadas durante a preparação do portfólio. A implementação de uma regra não significa que sua interpretação operacional esteja validada para todas as bases ou períodos.
+
+> **Convenção de status:** **Implementada** indica uma decisão presente no código ou confirmada na revisão do protótipo; **Em investigação** indica uma questão semântica ou técnica ainda sujeita a validação; **Planejada** indica evolução que ainda não faz parte do sistema.
 
 ---
 
 ## DT-001 — Separação entre ingestão e processamento
 
-**Status:** Adotada
+**Status:** Implementada.
 
-**Contexto:** Os arquivos disponibilizados pela SETRAN precisam ser baixados, extraídos, tratados e preparados para análise.
+**Contexto:** Os arquivos publicados pela SETRAN-RJ precisam ser baixados, extraídos, tratados e preparados para análise.
 
-**Decisão:** Separar a ingestão dos dados do pré-processamento e da análise.
+**Decisão:** Manter responsabilidades distintas para ingestão, pré-processamento, armazenamento e consultas analíticas.
 
 **Motivação:**
-- Facilitar testes e manutenção.
-- Permitir executar cada etapa independentemente.
-- Evitar misturar requisições HTTP, manipulação de arquivos e análise estatística.
+- Isolar requisições HTTP, regras de transformação e operações analíticas.
+- Permitir testar e executar as etapas separadamente.
+- Facilitar manutenção e reaproveitamento do pipeline.
 
-**Consequência:** O projeto terá módulos com responsabilidades específicas, exigindo uma organização inicial um pouco maior.
+**Implementação:** Os módulos `src/data/ingestion.py`, `preprocessing.py` e `storage.py` concentram etapas diferentes; `src/analytics/` contém as consultas.
+
+**Consequência:** A estrutura tem mais componentes, mas evita acoplamento entre download de arquivos e perguntas ao agente. A ingestão ocorre em processo separado do chat, não automaticamente a cada pergunta.
 
 ## DT-002 — Compatibilidade com esquemas históricos
 
-**Status:** Adotada
+**Status:** Implementada.
 
-**Contexto:** Arquivos antigos das bases não possuem a coluna `Cartão Hash`, presente nos arquivos recentes.
+**Contexto:** Arquivos antigos podem não possuir a coluna `Cartão Hash`, presente nos esquemas recentes.
 
-**Decisão:** Permitir a ausência dessa coluna durante o processamento, preenchendo-a com valores nulos no esquema padronizado.
+**Decisão:** Tratar essa coluna como opcional no esquema, preenchendo-a com valores nulos quando ausente, sem criar identificadores artificiais.
 
-**Motivação:** Preservar a possibilidade de análises históricas sem inventar identificadores.
+**Motivação:** Preservar a possibilidade de processar históricos com diferenças estruturais.
 
-**Limitação:** Não será possível realizar determinadas análises de sequência de validações por cartão nos períodos sem identificadores confiáveis.
+**Implementação:** `src/data/schemas.py` define as colunas opcionais; `padronizar_colunas()` usa o esquema para padronizar a saída.
 
-## DT-003 — Tratamento de inconsistências semânticas
+**Limitação:** A ausência de identificadores confiáveis impede determinadas análises de sequência de validações por cartão.
 
-**Status:** Em investigação
+## DT-003 — Tratamento conservador de inconsistências semânticas
 
-**Contexto:** O campo `Sentido` possui valores documentados para ida e volta, mas seu comportamento observado em determinados modais gera dúvidas sobre a interpretação.
+**Status:** Em investigação contínua.
 
-**Decisão:** Preservar os valores originais e evitar conclusões sobre direção de viagem até validar o significado do campo para cada modalidade.
+**Contexto:** Alguns campos possuem definições formais que não são suficientes para interpretar todos os registros de maneira consistente. Um exemplo é o campo `Sentido`, cujo comportamento varia conforme o modal.
 
-**Motivação:** Impedir que dados tecnicamente válidos produzam interpretações incorretas.
+**Decisão:** Não inferir direções ou características operacionais sem evidência específica. Preservar, quando possível, a informação original e documentar as transformações aplicadas.
 
-## DT-004 — Representação monetária
+**Motivação:** Um valor tecnicamente válido pode produzir uma conclusão incorreta se seu significado operacional estiver errado.
 
-**Status:** Escolhida; implementação pendente
+**Consequência:** Algumas análises ficam indisponíveis ou mais restritas até a validação da semântica dos campos.
 
-**Contexto:** As bases BU e BE possuem valores financeiros, incluindo tarifas, pagamentos e subsídios.
+**Relação com a DT-006:** Esta decisão estabelece o princípio geral. A DT-006 documenta uma normalização concreta adotada no protótipo.
 
-**Decisão:** Utilizar tipos decimais de precisão fixa, com duas casas decimais.
+## DT-004 — Precisão e regras para valores monetários
 
-**Motivação:** Evitar aproximações de ponto flutuante em cálculos monetários.
+**Status:** Implementada; testes por coluna em evolução.
 
-**Ponto de atenção:** Campos vazios de subsídio na BE podem representar zero. Essa regra deverá ser validada e aplicada especificamente ao campo, sem substituir indiscriminadamente outros valores ausentes.
+**Contexto:** BU e BE contêm valores de tarifa, transação e subsídio. Usar números binários de ponto flutuante pode introduzir imprecisão em cálculos financeiros.
 
-## DT-005 — Estratégia de armazenamento
+**Decisão:** Converter valores monetários para `Decimal`, exigir duas casas decimais e armazenar em Parquet com `decimal128(12, 2)`.
 
-**Status:** Planejada
+**Motivação:** Preservar a representação decimal exata dos valores financeiros.
 
-**Contexto:** Os arquivos são volumosos e o espaço disponível em disco é limitado.
+**Implementação:** `converter_decimal()` e `converter_valores_monetarios()` em `src/data/preprocessing.py`, com tipos explícitos em `src/data/storage.py`.
 
-**Decisão:** Planejar a conversão para Parquet, organizado por base, ano e mês da transação, permitindo múltiplos arquivos por partição.
+**Regra específica:** Na base BE, a configuração admite interpretar `valor_subsidio` ausente como zero. Essa permissão deve ser aplicada **por coluna** (`coluna in REGRAS[tipo]["nulos_como_zero"]`), não a todos os campos monetários da base.
+
+**Limitação:** A regra de preenchimento reflete uma interpretação operacional adotada para o protótipo. Não deve ser generalizada para outros campos sem validação. Os testes precisam cobrir a diferença entre colunas que aceitam ou rejeitam valores ausentes.
+
+## DT-005 — Armazenamento em Parquet particionado
+
+**Status:** Implementada.
+
+**Contexto:** Os CSVs podem ser volumosos, e o agente precisa consultar períodos específicos com eficiência.
+
+**Decisão:** Converter registros processados para Parquet, organizando arquivos por **base, ano e mês da transação**, permitindo que um mesmo lote de origem gere arquivos em mais de uma partição.
 
 **Motivação:**
-- Melhorar a eficiência das consultas analíticas.
-- Facilitar atualizações incrementais.
-- Evitar reescrever grandes arquivos mensais a cada atualização.
+- Evitar reler e transformar os CSVs a cada pergunta.
+- Consultar diretamente as partições mensais necessárias usando DuckDB.
+- Acrescentar novos lotes sem regravar um grande arquivo mensal único.
 
-**Limitações e cuidados:**
-- A data de publicação/processamento pode ser posterior à data da transação.
-- Será necessário controlar quais arquivos de origem já foram incorporados.
-- Os dados brutos só poderão ser descartados após validação e confirmação de que podem ser recuperados.
+**Implementação:** `salvar_particionado()` e `salvar_parquet()` em `src/data/storage.py`. Os Parquets usam esquema PyArrow explícito e compactação Snappy.
 
-## DT-006 — Normalização do sentido por modal
+**Cuidados:**
+- A data de publicação do arquivo pode diferir da data da transação.
+- A gravação de cada arquivo é validada antes da substituição do destino, mas a gravação de todos os arquivos de um lote não é uma transação única.
+- A quantidade e o tamanho ideais de arquivos por partição ainda podem ser refinados.
 
-**Status:** Em implementação
+## DT-006 — Normalização do campo `Sentido` por modal
 
-**Contexto:** O dicionário oficial define `Sentido` como 0 (não informado), 1 (ida) e 2 (volta). Entretanto, a exploração das bases BU e BE identificou valores potencialmente artificiais ou ausentes em registros de metrô, trem, BRT, barcas e vans.
+**Status:** Implementada como regra do protótipo; validação semântica em evolução.
 
-**Decisão:** Normalizar o sentido desses modais para 0, conforme a interpretação operacional adotada para o protótipo, preservando o valor original para rastreabilidade.
+**Contexto:** O dicionário oficial define `Sentido` como 0 (não informado), 1 (ida) e 2 (volta). Em determinados registros de transporte, os valores observados não permitem atribuir ida ou volta com confiança.
 
-**Motivação:** Evitar que o agente de IA apresente distribuições incorretas de ida e volta a partir de códigos não confiáveis.
+**Decisão:** Para sindicatos ou operadoras previamente configurados como não confiáveis nesse aspecto, normalizar `sentido` para 0 e preservar o valor recebido em `sentido_original`.
+
+**Motivação:** Impedir que o agente apresente distribuições de ida/volta baseadas em códigos que não possuem interpretação operacional confirmada.
+
+**Implementação:** `normalizar_sentido()` e conjuntos de configuração em `src/data/schemas.py`; a análise por veículo rejeita filtros de sentido 1 ou 2 quando aplicados a origens marcadas como não confiáveis.
 
 **Limitações:**
-- A classificação dos modais precisa ser validada.
-- A regra se baseia em observações empíricas e pode precisar de revisão.
-- O código 0 no conjunto processado representará também uma normalização realizada por falta de confiabilidade semântica.
-
-**Validação:** Registrar o número de valores modificados por base e por modal, distinguindo valores originalmente ausentes de valores originalmente iguais a 2.
+- A classificação dos modais foi adotada com base na investigação dos dados e pode precisar de revisão.
+- Um sentido 0 processado pode ser original ou resultado da normalização; `sentido_original` preserva essa distinção.
+- Ainda é desejável registrar métricas de quantos valores foram alterados por base e modal.
 
 ## DT-007 — Interpretação do índice de integração
 
-**Status:** Adotada
+**Status:** Implementada; interpretação operacional sujeita a validação adicional.
 
-**Contexto:** A base de Bilhete Único possui a coluna `Qtde Integrações`, descrita no dicionário oficial como a quantidade de integrações realizadas na mesma viagem.
+**Contexto:** A base BU contém `Qtde Integrações`, descrita no dicionário oficial como a quantidade de integrações realizadas na mesma viagem.
 
-Segundo a interpretação operacional adotada no projeto, o campo representa a sequência de validações, começando em zero na primeira validação e aumentando nas integrações seguintes.
+**Decisão:** Renomear o campo para `indice_integracao`, preservando seus valores sem somar 1 ou criar uma contagem derivada.
 
-**Decisão:** Renomear a coluna para `indice_integracao`, preservando seus valores originais, sem adicionar 1 ou criar colunas derivadas.
+**Motivação:** Segundo a interpretação utilizada no projeto, o campo se comporta como índice de validações na sequência, começando em zero; o nome reduz o risco de confundi-lo com a contagem total de passageiros, viagens ou validações.
 
-**Motivação:**
-- Tornar o nome mais coerente com o significado operacional identificado.
-- Evitar confundir o índice com a quantidade total de validações ou viagens.
-- Preservar a informação original sem transformações desnecessárias.
-- Manter a padronização centralizada no `schemas.py`.
+**Implementação:** Renomeação centralizada em `src/data/schemas.py` e conversão para inteiro anulável (`Int64`) em `preprocessar()`.
 
-**Consequências:**
-- A primeira validação possui índice 0.
-- A segunda validação possui índice 1, e assim sucessivamente.
-- O campo será armazenado como inteiro anulável (`Int64`) no Pandas.
-- Não será necessária uma etapa específica de transformação para esse campo.
-
-**Limitações:** A interpretação se baseia na experiência prática com os dados e é mais específica do que a descrição apresentada no dicionário oficial. O índice, isoladamente, não permite reconstruir integralmente uma viagem nem determinar seu destino.
-
-**Validação:** Conferir se os valores observados são inteiros não negativos e registrar eventuais inconsistências durante o processamento.
+**Limitação:** Essa interpretação é mais específica do que a descrição do dicionário oficial. O índice, isoladamente, **não** determina o destino de um passageiro nem reconstrói integralmente uma viagem. A verificação sistemática de valores negativos ou inconsistentes permanece como melhoria.
 
 ## DT-008 — Controle simplificado de lotes processados
 
-**Status:** Adotada para o protótipo; implementação pendente
+**Status:** Implementada.
 
-**Contexto:** Um arquivo CSV publicado pela SETRAN pode conter transações de diferentes meses, gerando múltiplos arquivos Parquet. O processamento pode ser interrompido antes da conclusão de todas as gravações.
+**Contexto:** Um CSV de origem pode conter transações de meses distintos, e seu processamento pode produzir múltiplos Parquets.
 
-Segundo as informações obtidas em reuniões com a SETRAN, os arquivos publicados não são alterados posteriormente. Mudanças estruturais serão disponibilizadas em novas versões das bases.
-
-**Decisão:** Utilizar um marcador de conclusão (`.done`) por lote de origem, criado somente após a gravação e validação de todos os arquivos Parquet correspondentes.
+**Decisão:** Usar um marcador `.done` por lote de origem, contendo os caminhos dos arquivos produzidos. Criá-lo apenas após concluir as gravações e validações necessárias.
 
 **Motivação:**
-- Evitar reprocessamentos desnecessários.
-- Identificar lotes concluídos sem depender dos CSVs originais.
-- Permitir a exclusão controlada dos arquivos brutos.
-- Reduzir a complexidade de implementação do MVP.
+- Evitar reprocessar arquivos já incorporados.
+- Relacionar um arquivo de origem às partições que ele gerou.
+- Permitir a retomada de uma ingestão simples, adequada ao MVP.
+
+**Implementação:** `lote_concluido()` e `registrar_lote()` em `src/data/storage.py`; o catálogo utiliza os marcadores para identificar os arquivos concluídos.
 
 **Limitações:**
-- A presença do marcador não substitui uma verificação integral da integridade dos dados.
-- Não haverá detecção automática de alterações nos arquivos de origem.
-- O reprocessamento de lotes incompletos poderá sobrescrever arquivos já produzidos.
-- A publicação de múltiplos Parquets não será atomicamente transacional.
-- Mudanças futuras no esquema poderão exigir reprocessamento e versionamento dos dados.
+- A existência de um `.done` não equivale a uma verificação completa do conteúdo de todos os registros.
+- Não há transação atômica envolvendo vários Parquets.
+- O controle não detecta automaticamente republicações ou mudanças de esquema.
+- Reprocessamentos e falhas concorrentes exigiriam mecanismos mais robustos em produção.
 
-**Evolução para produto:** Implementar controle transacional de lotes, versionamento dos esquemas, rastreabilidade completa das fontes, tratamento de concorrência e mecanismos de recuperação de falhas.
+**Premissa operacional:** Segundo as informações recebidas durante o projeto, arquivos já publicados não são alterados; mudanças futuras seriam publicadas em novas versões. Se essa premissa mudar, a estratégia deverá ser revista.
+
+## DT-009 — Ferramentas controladas em vez de SQL arbitrário gerado por IA
+
+**Status:** Implementada.
+
+**Contexto:** Um modelo de linguagem interpreta perguntas de modo flexível, mas pode escolher filtros incorretos, formular consultas inadequadas ou produzir conclusões sem suporte nos dados.
+
+**Decisão:** Integrar o Gemini por *function calling* a funções Python previamente implementadas, que validam parâmetros e executam consultas analíticas via DuckDB. O agente não recebe uma ferramenta genérica de SQL livre.
+
+**Motivação:** Manter os cálculos e as regras de negócio em código auditável e testável, reduzindo a superfície de consultas inesperadas.
+
+**Implementação:** `src/agent/agent.py` disponibiliza as operações de pesquisa de linhas, análise de validações por veículo e ranking de linhas. As consultas estão em `src/analytics/` e suas interfaces em `src/agent/tools.py`.
+
+**Trade-off:** A abordagem oferece maior controle, mas limita as perguntas que podem ser respondidas às funções disponíveis. Novas capacidades exigem implementação e validação de ferramentas adicionais.
+
+**Limitação:** Restringir as ferramentas não garante que o Gemini sempre escolha a função correta ou interprete corretamente o retorno.
+
+## DT-010 — Semântica de `numero_carro` e elegibilidade da análise por veículo
+
+**Status:** Implementada para os modais configurados.
+
+**Contexto:** Nos registros de BRT examinados no projeto, `numero_carro` identifica a **estação de validação**, não um veículo. Contar valores distintos desse campo como se fossem veículos produziria um indicador enganoso.
+
+**Decisão:** Excluir BRT e outros modais configurados como não elegíveis dos cálculos de veículos distintos observados. Para os registros elegíveis, identificar veículos observados pela combinação de `operadora` e `numero_carro`.
+
+**Motivação:** Não apresentar um número tecnicamente computável como se fosse uma medida confiável de frota.
+
+**Implementação:** Conjuntos de exclusão em `src/data/config.py` e filtros em `validacoes_por_veiculo_hora()` (`src/analytics/queries.py`).
+
+**Limitação:** Mesmo nos modais elegíveis, **veículos distintos observados não equivalem à frota total em operação**. O indicador também não mede ocupação nem passageiros únicos.
+
+## DT-011 — Interpretação conservadora de períodos e ausência de registros
+
+**Status:** Implementada em regras de consulta e instruções do agente; cobertura de dados ainda limitada.
+
+**Contexto:** O protótipo pode ter apenas parte dos arquivos de um período carregada. Uma consulta com zero validações registradas não demonstra que o serviço não operou.
+
+**Decisão:**
+- Usar explicitamente os períodos solicitados; não inventar uma data padrão para completar perguntas ambíguas.
+- Interpretar contagens como **validações registradas**, e não passageiros únicos.
+- Tratar ausência de registros como limitação de evidência, não como prova de paralisação do serviço.
+
+**Implementação:** Instruções em `src/agent/agent.py`; consultas temporais em `src/analytics/queries.py`, que usam início inclusivo e fim exclusivo.
+
+**Limitação:** Instruções ao modelo reduzem interpretações indevidas, mas não as impedem completamente. A aplicação ainda não possui uma validação abrangente de cobertura temporal por linha e por arquivo de origem.
+
+## DT-012 — Observabilidade das chamadas de ferramentas
+
+**Status:** Implementada.
+
+**Contexto:** Respostas textuais de um agente não mostram, por si só, quais operações foram executadas nem quanto tempo levaram.
+
+**Decisão:** Registrar eventos de início, conclusão e erro das ferramentas, com detalhes da operação e duração; disponibilizá-los na interface Streamlit.
+
+**Motivação:** Facilitar depuração, inspeção do fluxo e identificação de gargalos do protótipo.
+
+**Implementação:** `src/agent/eventos.py`, callbacks em `src/agent/agent.py` e painel lateral em `app.py`.
+
+**Limitações:**
+- O tempo exibido para uma ferramenta não deve ser confundido com o tempo total de resposta do Gemini.
+- A visualização dos eventos não constitui uma auditoria completa da precisão dos dados nem garante correção das interpretações do modelo.
+
+## DT-013 — Preparação reproduzível de um recorte demonstrativo
+
+**Status:** Implementada e testada localmente durante a preparação do portfólio (informação do autor).
+
+**Contexto:** Clonar o código não basta para responder perguntas: são necessários dados já processados, dependências Python e configuração de acesso ao Gemini.
+
+**Decisão:** Disponibilizar um script de preparação que utilize **BU, publicações de 01 a 05/03/2026**, reaproveitando o pipeline existente, e documentar a execução local com Python **3.13.5**.
+
+**Motivação:** Permitir que outra pessoa reproduza uma demonstração com dados públicos, sem distribuir os arquivos brutos ou os Parquets diretamente pelo Git.
+
+**Trade-off:** O procedimento depende da disponibilidade dos recursos externos, de tempo de download e de capacidade de memória/disk do ambiente. O recorte demonstrativo não deve ser confundido com a cobertura completa do sistema.
+
+**Observação:** Esta atualização foi informada após o ZIP originalmente revisado. Conferir o arquivo `scripts/preparar_demo.py` e os comandos do README na versão publicada antes da revisão final do portfólio.
 
 ---
 
-## Decisões em aberto
+## Limitações e decisões em aberto
 
-- Política de validação e descarte dos arquivos brutos.
-- Tamanho ideal dos arquivos Parquet.
-- Identificação e tratamento de registros duplicados.
-- Semântica operacional dos campos `Sentido` e `Qtde Integrações`.
-- Estratégia de segurança e privacidade para as ferramentas do agente de IA.
+- **Cobertura dos dados:** verificar a completude dos períodos carregados e não atribuir ausência de registros à ausência de serviço.
+- **Regras semânticas:** validar as convenções de `Sentido`, `indice_integracao` e identificação de veículos para cada modal.
+- **Qualidade:** ampliar testes automatizados, especialmente para tratamento monetário por coluna, datas e consultas analíticas.
+- **Segurança e privacidade:** manter credenciais fora do repositório e revisar o tratamento de identificadores, erros e parâmetros antes de qualquer publicação como serviço.
+- **Pipeline:** definir política de descarte dos CSVs, verificações de integridade mais amplas, tratamento de concorrência e versionamento de esquemas.
+- **Produto:** expandir o conjunto de ferramentas e validar utilidade, compreensão e correção com usuários reais; ainda não há métricas de impacto validadas.
+
+## Referências internas
+
+- `src/data/schemas.py` — esquemas, formatos e regras por base.
+- `src/data/preprocessing.py` — conversões e normalização.
+- `src/data/storage.py` — escrita de Parquet e controle de lotes.
+- `src/data/catalog.py` — catálogo pesquisável.
+- `src/data/config.py` — configurações e regras por modal.
+- `src/analytics/queries.py` — cálculos e filtros analíticos.
+- `src/agent/agent.py` e `src/agent/tools.py` — integração com o Gemini e exposição das ferramentas.
+- `app.py` — interface Streamlit e eventos visíveis ao usuário.
