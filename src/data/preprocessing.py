@@ -105,7 +105,7 @@ def converter_valores_monetarios(df: pd.DataFrame, tipo: TipoBase) -> pd.DataFra
     ]
 
     for coluna in colunas_monetarias:
-        nulos_como_zero = REGRAS[tipo]['nulos_como_zero']
+        nulos_como_zero = coluna in REGRAS[tipo]["nulos_como_zero"]
 
         df[coluna] = df[coluna].map(
             lambda valor: converter_decimal(

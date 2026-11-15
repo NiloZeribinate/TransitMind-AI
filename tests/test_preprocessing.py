@@ -1,7 +1,8 @@
 import pytest
+import pandas as pd
 from decimal import Decimal
 
-from src.data.preprocessing import converter_decimal
+from src.data.preprocessing import converter_decimal, converter_valores_monetarios
 
 
 def test_conversao_decimal():
@@ -32,3 +33,15 @@ def test_decimal_invalido():
 
     with pytest.raises(ValueError):
         converter_decimal(None)
+
+
+def test_be_nao_converte_outros_nulos_para_zero():
+    df = pd.DataFrame({
+        "valor_linha": ["4,30"],
+        "valor_transacao": [None],
+        "valor_subsidio": [None],
+    })
+
+    with pytest.raises(ValueError, match="ausente"):
+        converter_valores_monetarios(df, "BE")
+
