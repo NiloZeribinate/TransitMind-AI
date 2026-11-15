@@ -216,7 +216,6 @@ st.caption(
 )
 
 area_chat = st.container(
-    height=480,
     border=False,
     autoscroll=True,
 )
