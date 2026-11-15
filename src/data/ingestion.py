@@ -193,6 +193,7 @@ def baixar_arquivo(
 
     # Não baixa novamente um arquivo já existente.
     if arquivo.exists() and arquivo.stat().st_size > 0:
+        print(f"- Arquivo {nome} já existente.")
         return arquivo
 
     # Remove eventual download incompleto de uma execução anterior.
@@ -391,6 +392,16 @@ def baixar_periodo(
 
                 if extrair and marcador.exists():
                     ignorados.append(arquivo)
+                    
+                    correspondencia = re.search(
+                        r"_(\d{4})_(\d{2})_(\d{2})(?=\.|$)",
+                        recurso.get("name", ""),
+                    )
+
+                    if correspondencia:
+                        ano, mes, dia = map(int, correspondencia.groups())
+                        datas_encontradas.add(date(ano, mes, dia))
+                    
                     continue
 
                 if arquivo.exists() and arquivo.stat().st_size > 0:
