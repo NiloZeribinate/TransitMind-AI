@@ -107,15 +107,113 @@ docs/            # Registro das decisões técnicas
 tests/           # Testes automatizados
 assets/          # Recursos auxiliares da interface
 experiments/     # Scripts exploratórios de desenvolvimento
+scripts/         # Preparação automatizada dos dados de demonstração
 ```
 
-## Execução local e testes
+## Instalação e execução
 
-**A preparação do ambiente está sendo documentada.** Para executar o agente e as visualizações, são necessários uma chave de API do Gemini, dependências Python e arquivos Parquet previamente gerados para os períodos desejados.
+### Pré-requisitos
 
-No próximo passo serão acrescentados e validados o manifesto de dependências, as variáveis de ambiente de exemplo e o comando de inicialização da aplicação. Até isso acontecer, esta seção **não deve ser interpretada como um guia de instalação completo**.
+- Python 3.13.5
+- Git
+- Conexão com a internet para baixar os dados
+- Chave de API do Google Gemini
 
-Há testes automatizados em `tests/`, executados com Pytest. A cobertura ainda é limitada e está sendo ampliada para as regras específicas de cada base, sobretudo em conversões monetárias e análise de datas e períodos.
+### 1. Clonar o repositório
+
+```bash
+git clone https://github.com/NiloZeribinate/TransitMind-AI.git
+cd TransitMind-AI
+```
+
+### 2. Configurar o ambiente Python
+
+```bash
+python3.13 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+```
+
+Os comandos acima utilizam Linux/macOS.
+
+### 3. Configurar a API do Gemini
+
+Copie o arquivo de exemplo:
+
+```bash
+cp .env.example .env
+```
+
+Edite o arquivo `.env` e configure sua chave:
+
+```dotenv
+GEMINI_API_KEY=sua_chave_aqui
+```
+
+O modelo utilizado pode ser configurado pela variável
+`GEMINI_MODEL`, conforme o arquivo `.env.example`.
+
+**Nunca publique sua chave de API.** O arquivo `.env`
+é ignorado pelo Git.
+
+### 4. Preparar os dados
+
+```bash
+python -m scripts.preparar_demo
+```
+
+O script baixa e processa arquivos públicos da base
+**Bilhete Único (BU)**, correspondentes às publicações
+de 1º a 5 de março de 2026.
+
+A preparação inclui:
+
+- Download dos arquivos CSV disponíveis;
+- Pré-processamento e padronização dos dados;
+- Armazenamento em Parquet particionado;
+- Registro dos lotes processados;
+- Geração do catálogo necessário às consultas.
+
+Os arquivos de dados são armazenados localmente e não
+são versionados neste repositório.
+
+O script permite reaproveitar lotes já processados,
+evitando repetir desnecessariamente a preparação.
+
+**Observação:** o download depende da disponibilidade
+dos arquivos no portal público. As análises ficam
+limitadas aos dados efetivamente preparados.
+
+### 5. Iniciar a aplicação
+
+```bash
+streamlit run app.py
+```
+
+O Streamlit disponibilizará uma URL local para acessar
+a interface pelo navegador.
+
+Você poderá fazer perguntas em linguagem natural sobre
+os dados disponíveis no período preparado.
+
+### 6. Executar os testes
+
+Para instalar também as dependências de desenvolvimento:
+
+```bash
+python -m pip install -r requirements-dev.txt
+```
+
+Execute a suíte de testes:
+
+```bash
+python -m pytest -q
+```
+
+Os testes verificam comportamentos implementados do
+pipeline, incluindo regras de pré-processamento.
+A cobertura ainda não é exaustiva.
+
 
 ## Limitações atuais
 
